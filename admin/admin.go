@@ -6,40 +6,29 @@ import (
 	// internal packages
 	"admin-backend/db"
 	"admin-backend/models"
+	"admin-backend/utils"
 
 	// std
-	"context"
+
 	"encoding/json"
 	"fmt"
 
 	// mongo
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+// @desc   Get grades
+// @route  GET /api/admin/grades
+// @access Private
 func getGrades(c *fiber.Ctx) error {
   schoolIDLocals := fmt.Sprintf("%v", c.Locals("schoolID"))
   var schoolID string
   json.Unmarshal([]byte(schoolIDLocals), &schoolID)
 
-  var grades []models.Grade
-  gradesCollection, err := db.GetCollection("grades")
-  if err != nil {
-    return c.Status(500).SendString(fmt.Sprintf("%v", err))
-  }
-
-  options := options.Find()
-  options.SetSort(bson.D{{Key: "gradeNumber", Value: 1}, {Key: "gradeLetter", Value: 1}})
-  cursor, err := gradesCollection.Find(context.Background(), bson.M{
+  grades, err := db.GetGrades(bson.M{
     "schoolID": schoolID,
-  }, options)
-  if err != nil {
-    return c.Status(500).SendString(fmt.Sprintf("%v", err))
-  }
-
-  if err = cursor.All(context.Background(), &grades); err != nil {
-    return c.Status(500).SendString(fmt.Sprintf("%v", err))
-  }
+  }, db.GradeSort)
+  utils.CheckError(c, err) 
 
   if len(grades) == 0 {
     grades = []models.Grade {}
@@ -48,30 +37,17 @@ func getGrades(c *fiber.Ctx) error {
   return c.JSON(grades)
 }
 
+// @desc   Get subjects
+// @route  GET /api/admin/subjects
+// @access Private
 func getSubjects(c *fiber.Ctx) error {
 
   gradeID := c.Params("gradeID")
 
-  schoolIDLocals := fmt.Sprintf("%v", c.Locals("schoolID"))
-  var schoolID string
-  json.Unmarshal([]byte(schoolIDLocals), &schoolID)
-
-  var subjects []models.Subject
-  subjectsCollection, err := db.GetCollection("subjects")
-  if err != nil {
-    return c.Status(500).SendString(fmt.Sprintf("%v", err))
-  }
-
-  cursor, err := subjectsCollection.Find(context.Background(), bson.M{
+  subjects, err := db.GetSubjects(bson.M{
     "grade.gradeID": gradeID,
-  })
-  if err != nil {
-    return c.Status(500).SendString(fmt.Sprintf("%v", err))
-  }
-
-  if err = cursor.All(context.Background(), &subjects); err != nil {
-    return c.Status(500).SendString(fmt.Sprintf("%v", err))
-  }
+  }, db.GradeSort)
+  utils.CheckError(c, err) 
 
   if len(subjects) == 0 {
     subjects = []models.Subject {}

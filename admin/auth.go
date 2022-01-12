@@ -14,7 +14,6 @@ import (
 	// std
 	"context"
 	"encoding/json"
-	"fmt"
 
 	// mongo
 	"go.mongodb.org/mongo-driver/bson"
@@ -23,7 +22,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func adminMiddleware(c *fiber.Ctx) error {
+func AdminMiddleware(c *fiber.Ctx) error {
   var token string
 
   authHeader := c.Get("Authorization")
@@ -37,103 +36,59 @@ func adminMiddleware(c *fiber.Ctx) error {
       return utils.JWTKey, nil
     })
 
-    if err != nil {
-      return c.Status(500).SendString(fmt.Sprintf("%v", err))
-    }
+    utils.CheckError(c, err)
 
     if !tkn.Valid {
-      return c.Status(500).SendString("token not valid")
+      return utils.MessageError(c, "token not valid")
     }
 
-    adminIDBytes, _ := json.Marshal(claims.AdminID)
-    adminIDJSON := string(adminIDBytes)
-    c.Locals("adminID", adminIDJSON)
-    
-    schoolIDBytes, _ := json.Marshal(claims.SchoolID)
-    schoolIDJSON := string(schoolIDBytes)
-    c.Locals("schoolID", schoolIDJSON)
+    utils.SetLocals(c, "adminID", claims.AdminID)
+    utils.SetLocals(c, "schoolID", claims.SchoolID)
 
   }
 
   if (token == "") {
-    return c.Status(500).SendString("no token")
+    return utils.MessageError(c, "no token")
   }
 
   return c.Next()
 }
 
+// @desc   login
+// @route  POST /api/admin/login
+// @access Private
 func postLogin(c *fiber.Ctx) error {
 
   // getting body and unmarshalling it into a body variable
   var body map[string]string
   json.Unmarshal(c.Body(), &body)
 
-  // getting the db collection
-  collection, err := db.GetCollection("admins")
-  if err != nil {
-    return c.Status(500).SendString(fmt.Sprintf("%v", err))
-  }
-
   // getting the admin
   var admin models.Admin
-  if err = collection.FindOne(context.Background(), bson.M{"email": body["email"]}).Decode(&admin); err != nil {
+  if err := db.Admins.FindOne(context.Background(), bson.M{"email": body["email"]}).Decode(&admin); err != nil {
     return c.Status(401).JSON(bson.M{
       "message": "Nu există niciun administrator cu email-ul introdus.",
     })
   }
 
-  // // if the admin doesn't have a password
-  // if admin.Password == "" {
-  //   hashedPassword, err := bcrypt.GenerateFromPassword([]byte(body["password"]), 10)
-  //   if err != nil {
-  //     return c.Status(500).SendString(fmt.Sprintf("%v", err))
-  //   }
+  hashedPassword := admin.Password
 
-  //   var modifiedAdmin models.Admin
-  //   collection.FindOneAndUpdate(context.Background(), bson.M{"cnp": body["cnp"]}, bson.D{
-  //     {Key: "$set", Value: bson.D{{Key: "password",Value: string(hashedPassword)}}},
-  //   }).Decode(&modifiedAdmin)
+  compareErr := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(body["password"]))
 
-    
-  //   // jwt
-  //   tokenString, err := utils.AdminGenerateToken(modifiedAdmin.AdminID, modifiedAdmin.SchooldID)
-  //   if err != nil {
-  //     return c.Status(500).SendString(fmt.Sprintf("%v", err))
-  //   }
+  tokenString, err := utils.AdminGenerateToken(admin.AdminID, admin.SchooldID)
+  utils.CheckError(c, err)
 
-  //   return c.JSON(bson.M{
-  //     "adminID": modifiedAdmin.AdminID,
-  //     "schoolID": modifiedAdmin.SchooldID,
-  //     "firstName": modifiedAdmin.FirstName,
-  //     "lastName": modifiedAdmin.LastName,
-  //     "email": modifiedAdmin.Email,
-  //     "password": modifiedAdmin.Password,
-  //     "token": tokenString,
-  //   })
-  // } else {
-    hashedPassword := admin.Password
-
-    compareErr := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(body["password"]))
-
-    tokenString, err := utils.AdminGenerateToken(admin.AdminID, admin.SchooldID)
-    if err != nil {
-      return c.Status(500).SendString(fmt.Sprintf("%v", err))
-    }
-
-    if compareErr == nil {
-      return c.JSON(bson.M{
-        "adminID": admin.AdminID,
-        "schoolID": admin.SchooldID,
-        "firstName": admin.FirstName,
-        "lastName": admin.LastName,
-        "email": admin.Email,
-        "password": admin.Password,
-        "token": tokenString,
-      })
-    } else {
-      return c.Status(401).JSON(bson.M{
-        "message": "Nu ați introdus parola validă.",
-      })
-    }
-  // } 
+  if compareErr == nil {
+    return c.JSON(bson.M{
+      "adminID": admin.AdminID,
+      "schoolID": admin.SchooldID,
+      "firstName": admin.FirstName,
+      "lastName": admin.LastName,
+      "email": admin.Email,
+      "password": admin.Password,
+      "token": tokenString,
+    })
+  } else {
+    return utils.MessageError(c, "Nu ați introdus parola validă.")
+  }
 }

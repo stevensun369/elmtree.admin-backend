@@ -11,6 +11,7 @@ import (
 	// internal pacakges
 	"admin-backend/admin"
 	"admin-backend/db"
+	"admin-backend/timetable"
 )
 
 func main() {
@@ -22,10 +23,11 @@ func main() {
 
   db.InitDatabase()
   admin.Routes(app)
+  timetable.Routes(app)
 
   app.Get("/", func (c *fiber.Ctx) error {
     return c.SendString("api is running")
   })
 
-  log.Fatal(app.Listen(":9999"))
+  log.Fatal(app.Listen(":8888"))
 }
